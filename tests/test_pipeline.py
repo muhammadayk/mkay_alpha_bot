@@ -2,6 +2,7 @@ import unittest
 
 from mkay_radar.models import Opportunity, canonicalize_url
 from mkay_radar.sources.airdrops_io import AirdropsIoCollector
+from mkay_radar.sources.airdrop_alert import AirdropAlertCollector
 from mkay_radar.storage import SQLiteStore
 from mkay_radar.telegram import format_review
 
@@ -36,3 +37,9 @@ class PipelineTests(unittest.TestCase):
         parsed = AirdropsIoCollector._parse_guide("https://airdrops.io/example/", html)
         self.assertEqual(parsed.chain, "Base")
         self.assertEqual(parsed.reward, "10,000 tokens")
+
+    def test_airdrop_alert_rss_keeps_airdrop_entries(self) -> None:
+        feed = b"""<rss><channel><item><title>Example Airdrop</title><link>https://example.com/drop</link><description><![CDATA[<p>Join the campaign.</p>]]></description></item><item><title>Market News</title><link>https://example.com/news</link><description>Not a campaign.</description></item></channel></rss>"""
+        records = AirdropAlertCollector.parse(feed)
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0].source, "airdropalert.com")

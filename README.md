@@ -10,7 +10,7 @@ It is **review-first**: every imported opportunity has `REVIEW` status. The coll
 
 ## What is included
 
-- A polite Airdrops.io collector using `requests` + BeautifulSoup; default limit: 10 individual public guides per run.
+- A polite Airdrops.io collector plus AirdropAlert's official RSS feed; default limit: 10 records per source per run.
 - Normalization into one opportunity record (title, project, category, chain, actions, reward, source status, link).
 - Deduplication via canonical source URL, content hash, and a conservative title-similarity fallback.
 - Local SQLite by default, with a Supabase/PostgreSQL storage adapter when credentials are added.
@@ -31,7 +31,7 @@ It is **review-first**: every imported opportunity has `REVIEW` status. The coll
 
    ```powershell
    $env:PYTHONPATH = "src"
-   python -m mkay_radar.cli collect-airdrops
+   python -m mkay_radar.cli collect-all
    python -m mkay_radar.cli review --limit 5
    ```
 
@@ -82,4 +82,4 @@ The collector reads the site's public home/listing and a limited number of linke
 
 ## What is intentionally not included yet
 
-No paid proxy, hosting, AI API, automatic public posting, browser automation, or additional source. The next source should be added only after this flow proves stable across several manual reviews.
+No paid proxy, AI API, or browser automation. CryptoRank is intentionally excluded until it grants a suitable licence or written permission: its terms restrict automated extraction and republishing.
