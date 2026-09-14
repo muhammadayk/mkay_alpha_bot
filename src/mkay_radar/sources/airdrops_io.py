@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 class AirdropsIoCollector:
     max_items: int = int(os.getenv("RADAR_MAX_ITEMS_PER_RUN", "10"))
     delay_seconds: float = float(os.getenv("RADAR_REQUEST_DELAY_SECONDS", "1"))
-    user_agent: str = os.getenv("RADAR_USER_AGENT", "MKAY-Opportunity-Radar/0.1")
+    user_agent: str = os.getenv("RADAR_USER_AGENT") or "MKAY-Opportunity-Radar/0.1"
 
     def __post_init__(self) -> None:
         self.session = requests.Session()

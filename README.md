@@ -72,6 +72,10 @@ python -m mkay_radar.cli telegram-listen
 
 For each destination group, add the bot as an admin, then have a human administrator send `/enable_broadcast` in that group. Telegram does not provide bots a list of every group they belong to, so this one-time registration is required. When you approve a review in the private group, the listener updates its status and sends an alpha post to every registered group. The listener must remain running; deploy it to an always-on host before relying on it when your computer is off.
 
+## Free always-on deployment
+
+Use GitHub Actions for scheduled collection and the Cloudflare Worker in `worker/` for instant Telegram webhooks. The Worker replaces the local `telegram-listen` command once deployed. Follow the deployment steps provided with your Cloudflare account, set all four Worker secrets, then set Telegram's webhook to the Worker URL. Never commit `.env` or any secret.
+
 ## Source-access boundaries
 
 The collector reads the site's public home/listing and a limited number of linked public guide pages. It follows `robots.txt` exclusions, avoids `/visit/`, search, admin, login, and any protected areas, and waits between guide requests. Before scheduling it, configure a real project contact in `RADAR_USER_AGENT` and re-check the source's current policies; source layouts and permissions can change.

@@ -1,0 +1,7 @@
+name = "mkay-radar-telegram"
+main = "src/index.js"
+compatibility_date = "2026-09-14"
+
+# Set sensitive values with `wrangler secret put`, never in this file.
+# Required: TELEGRAM_BOT_TOKEN, TELEGRAM_WEBHOOK_SECRET,
+# SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
