@@ -3,6 +3,7 @@ import unittest
 from mkay_radar.models import Opportunity, canonicalize_url
 from mkay_radar.sources.airdrops_io import AirdropsIoCollector
 from mkay_radar.sources.airdrop_alert import AirdropAlertCollector
+from mkay_radar.sources.nft_calendar import NftCalendarCollector
 from mkay_radar.storage import SQLiteStore
 from mkay_radar.telegram import format_review
 
@@ -43,3 +44,27 @@ class PipelineTests(unittest.TestCase):
         records = AirdropAlertCollector.parse(feed)
         self.assertEqual(len(records), 1)
         self.assertEqual(records[0].source, "airdropalert.com")
+
+    def test_nft_calendar_event_metadata_is_bounded_to_its_label(self) -> None:
+        html = (
+            '<h1>Example Drop</h1>'
+            '<meta name="description" content="A sample NFT drop for tests.">'
+            '<p>September 26, 2026 \u2013 October 03, 2026</p>'
+            '<h3>Blockchain:</h3><a href="/b/ethereum/">Ethereum</a>'
+            '<h3>Marketplace:</h3><a href="/marketplace/example/">Example Market</a>'
+        )
+        parsed = NftCalendarCollector._parse_event("https://nftcalendar.io/event/example/", html)
+        self.assertEqual(parsed.chain, "Ethereum")
+        self.assertEqual(parsed.reward, "Example Market")
+        self.assertIn("September 26, 2026", parsed.source_status)
+        self.assertEqual(parsed.category, "NFT_WHITELIST")
+
+    def test_nft_calendar_excludes_non_event_links(self) -> None:
+        html = (
+            '<a href="/event/real-drop/">Real Drop</a>'
+            '<a href="/events/community/add/">Submit a Drop</a>'
+            '<a href="/goto/mexc">Sponsored</a>'
+            '<a href="/marketplaces/">Marketplaces</a>'
+        )
+        urls = NftCalendarCollector._event_urls(html)
+        self.assertEqual(urls, ["https://nftcalendar.io/event/real-drop/"])

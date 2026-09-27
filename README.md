@@ -10,7 +10,9 @@ It is **review-first**: every imported opportunity has `REVIEW` status. The coll
 
 ## What is included
 
-- A polite Airdrops.io collector plus AirdropAlert's official RSS feed; default limit: 10 records per source per run.
+- **Airdrops** — a polite Airdrops.io collector plus AirdropAlert's official RSS feed.
+- **NFT whitelist / mint opportunities** — a polite NFTCalendar.io collector reading its public upcoming-drops listing and individual event pages (category `NFT_WHITELIST`).
+- Default limit: 10 records per source per run (`RADAR_MAX_ITEMS_PER_RUN`).
 - Normalization into one opportunity record (title, project, category, chain, actions, reward, source status, link).
 - Deduplication via canonical source URL, content hash, and a conservative title-similarity fallback.
 - Local SQLite by default, with a Supabase/PostgreSQL storage adapter when credentials are added.
@@ -27,7 +29,7 @@ It is **review-first**: every imported opportunity has `REVIEW` status. The coll
    ```
 
 3. Copy `.env.example` to `.env`. Do not commit it.
-4. Start locally (no account required):
+4. Start locally (no account required for Airdrops.io, AirdropAlert, or NFTCalendar.io):
 
    ```powershell
    $env:PYTHONPATH = "src"
@@ -78,8 +80,17 @@ Use GitHub Actions for scheduled collection and the Cloudflare Worker in `worker
 
 ## Source-access boundaries
 
-The collector reads the site's public home/listing and a limited number of linked public guide pages. It follows `robots.txt` exclusions, avoids `/visit/`, search, admin, login, and any protected areas, and waits between guide requests. Before scheduling it, configure a real project contact in `RADAR_USER_AGENT` and re-check the source's current policies; source layouts and permissions can change.
+Each scraped collector (Airdrops.io, NFTCalendar.io) reads only the site's public home/listing and a limited number of linked public pages. Both avoid the site's own sponsored/tracking redirect links (`/visit/` on Airdrops.io, `/goto/` on NFTCalendar.io), search, admin, login, and any protected areas, and wait between page requests. Before scheduling either, configure a real project contact in `RADAR_USER_AGENT`, re-check NFTCalendar.io's [Terms of Use](https://nftcalendar.io/terms/) and `robots.txt`, and confirm nothing has changed; source layouts and permissions can change.
 
 ## What is intentionally not included yet
 
 No paid proxy, AI API, or browser automation. CryptoRank is intentionally excluded until it grants a suitable licence or written permission: its terms restrict automated extraction and republishing.
+
+**Web3 jobs/gigs** were briefly tried via web3.career's documented API, but the source stopped responding reliably and was pulled back out rather than shipped in a broken state. If a solid jobs/gigs source turns up later (official API or RSS, not a scrape of an undocumented endpoint), it can be added the same way the other collectors were.
+
+**Bounties, quests, and campaigns** (Gitcoin, Galxe, Zealy, Layer3, Superteam Earn, and similar) are also not included yet. As of this writing, none of them offer a public RSS feed or a documented, ToS-compliant public API for third-party bots the way Airdrops.io and AirdropAlert do — most either require scraping their app's internal endpoints (undocumented, ToS status unclear) or a paid/partnered API. Rather than guess at an endpoint or risk violating a platform's terms, the options are:
+
+1. Reach out to one of these platforms directly for official API/partner access, and a matching collector can be added the same way the other sources were (see `src/mkay_radar/sources/` for the pattern: a `collect()` method returning a list of `Opportunity` records).
+2. Curate them manually into the Telegram review queue in the meantime — the review/approve/broadcast pipeline works the same regardless of where an opportunity came from.
+
+If you get access to one of these (or another Web3-specific job, bounty, or new-project source) and want it wired in, open an issue or a PR describing the feed/API and its terms.

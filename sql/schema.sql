@@ -3,7 +3,7 @@ create table if not exists opportunities (
   id uuid primary key default gen_random_uuid(),
   title text not null,
   project text not null,
-  category text not null check (category in ('AIRDROP', 'TESTNET', 'JOB', 'BOUNTY', 'GRANT', 'QUEST', 'CAMPAIGN', 'CONTEST', 'HACKATHON', 'AMBASSADOR', 'NEW_PROJECT')),
+  category text not null check (category in ('AIRDROP', 'TESTNET', 'JOB', 'BOUNTY', 'GRANT', 'QUEST', 'CAMPAIGN', 'CONTEST', 'HACKATHON', 'AMBASSADOR', 'NEW_PROJECT', 'NFT_WHITELIST')),
   description text,
   requirements text,
   chain text,
@@ -25,6 +25,27 @@ create table if not exists opportunities (
 
 -- Safe when applying this upgrade to a project created before review buttons.
 alter table opportunities add column if not exists review_sent_at timestamptz;
+
+-- Safe when applying this upgrade to a project created before the NFT_WHITELIST category.
+-- Postgres CHECK constraints can't have a value appended in place, so the existing one is
+-- looked up by its actual name (auto-generated names can differ across projects) and
+-- recreated with the wider list. This block is idempotent: safe to re-run schema.sql any time.
+do $$
+declare
+  con_name text;
+begin
+  select conname into con_name
+  from pg_constraint
+  where conrelid = 'opportunities'::regclass
+    and contype = 'c'
+    and pg_get_constraintdef(oid) ilike '%category%';
+  if con_name is not null then
+    execute format('alter table opportunities drop constraint %I', con_name);
+  end if;
+end $$;
+
+alter table opportunities add constraint opportunities_category_check
+  check (category in ('AIRDROP', 'TESTNET', 'JOB', 'BOUNTY', 'GRANT', 'QUEST', 'CAMPAIGN', 'CONTEST', 'HACKATHON', 'AMBASSADOR', 'NEW_PROJECT', 'NFT_WHITELIST'));
 
 create table if not exists source_records (
   id uuid primary key default gen_random_uuid(),
