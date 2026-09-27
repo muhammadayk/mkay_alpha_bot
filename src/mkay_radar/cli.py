@@ -4,6 +4,7 @@ import argparse
 import os
 import sys
 
+import requests
 from dotenv import load_dotenv
 
 from mkay_radar.sources.airdrops_io import AirdropsIoCollector
@@ -15,6 +16,28 @@ from mkay_radar.telegram import TelegramReviewPublisher, format_review
 
 def store_from_env():
     return open_store(os.getenv("RADAR_DATABASE_URL", "sqlite:///data/radar.db"), os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_SERVICE_ROLE_KEY"))
+
+
+def run_collectors(collectors, store) -> tuple[dict[str, int], bool]:
+    """Run each (name, collector) pair independently: one source's failure never
+    stops the others, and whatever it already collected before failing is lost,
+    but every other source's records still land in the store."""
+    outcomes: dict[str, int] = {}
+    has_failures = False
+    for source_name, collector in collectors:
+        source_outcomes: dict[str, int] = {}
+        try:
+            records = collector.collect()
+        except requests.RequestException as error:
+            print(f"{source_name} run failed, skipping (other sources still ran): {error}")
+            has_failures = True
+            continue
+        for opportunity in records:
+            result = store.upsert(opportunity)
+            source_outcomes[result] = source_outcomes.get(result, 0) + 1
+            outcomes[result] = outcomes.get(result, 0) + 1
+        print(f"{source_name} run complete: {source_outcomes or {'no_records': 0}}")
+    return outcomes, has_failures
 
 
 def main() -> None:
@@ -38,7 +61,6 @@ def main() -> None:
 
     collect_commands = {"collect-airdrops", "collect-airdrop-alert", "collect-nft-calendar", "collect-all"}
     if args.command in collect_commands:
-        outcomes: dict[str, int] = {}
         collectors = []
         if args.command in {"collect-airdrops", "collect-all"}:
             collectors.append(("Airdrops.io", AirdropsIoCollector()))
@@ -46,14 +68,10 @@ def main() -> None:
             collectors.append(("AirdropAlert", AirdropAlertCollector()))
         if args.command in {"collect-nft-calendar", "collect-all"}:
             collectors.append(("NFTCalendar.io", NftCalendarCollector()))
-        for source_name, collector in collectors:
-            source_outcomes: dict[str, int] = {}
-            for opportunity in collector.collect():
-                result = store.upsert(opportunity)
-                source_outcomes[result] = source_outcomes.get(result, 0) + 1
-                outcomes[result] = outcomes.get(result, 0) + 1
-            print(f"{source_name} run complete: {source_outcomes or {'no_records': 0}}")
+        outcomes, has_failures = run_collectors(collectors, store)
         print(f"Total run: {outcomes or {'no_records': 0}}")
+        if has_failures:
+            sys.exit(1)
         return
 
     if args.command == "process-telegram-actions":

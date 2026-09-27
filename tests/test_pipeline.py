@@ -1,5 +1,9 @@
+import tempfile
 import unittest
 
+import requests
+
+from mkay_radar.cli import run_collectors
 from mkay_radar.models import Opportunity, canonicalize_url
 from mkay_radar.sources.airdrops_io import AirdropsIoCollector
 from mkay_radar.sources.airdrop_alert import AirdropAlertCollector
@@ -18,7 +22,6 @@ class PipelineTests(unittest.TestCase):
 
 
     def test_sqlite_deduplicates_canonical_url(self) -> None:
-        import tempfile
         with tempfile.TemporaryDirectory() as directory:
             store = SQLiteStore(f"sqlite:///{directory}/radar.db")
             store.initialize()
@@ -68,3 +71,23 @@ class PipelineTests(unittest.TestCase):
         )
         urls = NftCalendarCollector._event_urls(html)
         self.assertEqual(urls, ["https://nftcalendar.io/event/real-drop/"])
+
+    def test_one_failing_collector_does_not_block_the_others(self) -> None:
+        class WorkingCollector:
+            def collect(self):
+                return [opportunity("https://airdrops.io/working-source/")]
+
+        class FailingCollector:
+            def collect(self):
+                raise requests.HTTPError("403 Client Error: Forbidden")
+
+        with tempfile.TemporaryDirectory() as directory:
+            store = SQLiteStore(f"sqlite:///{directory}/radar.db")
+            store.initialize()
+            outcomes, has_failures = run_collectors(
+                [("Working", WorkingCollector()), ("Failing", FailingCollector())], store
+            )
+            self.assertTrue(has_failures)
+            self.assertEqual(outcomes.get("created"), 1)
+            self.assertEqual(len(store.review_queue(10)), 1)
+            store.connection.close()
