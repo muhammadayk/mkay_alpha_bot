@@ -9,7 +9,6 @@ from dotenv import load_dotenv
 
 from mkay_radar.sources.airdrops_io import AirdropsIoCollector
 from mkay_radar.sources.airdrop_alert import AirdropAlertCollector
-from mkay_radar.sources.nft_calendar import NftCalendarCollector
 from mkay_radar.storage import open_store
 from mkay_radar.telegram import TelegramReviewPublisher, format_review
 
@@ -49,7 +48,6 @@ def main() -> None:
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("collect-airdrops", help="Collect public Airdrops.io guides into the review queue")
     commands.add_parser("collect-airdrop-alert", help="Collect official AirdropAlert RSS listings into the review queue")
-    commands.add_parser("collect-nft-calendar", help="Collect public NFTCalendar.io whitelist/drop listings into the review queue")
     commands.add_parser("collect-all", help="Collect every approved source into the review queue")
     review = commands.add_parser("review", help="Print or send Telegram-ready review messages")
     review.add_argument("--limit", type=int, default=5)
@@ -59,15 +57,13 @@ def main() -> None:
     args = parser.parse_args()
     store = store_from_env()
 
-    collect_commands = {"collect-airdrops", "collect-airdrop-alert", "collect-nft-calendar", "collect-all"}
+    collect_commands = {"collect-airdrops", "collect-airdrop-alert", "collect-all"}
     if args.command in collect_commands:
         collectors = []
         if args.command in {"collect-airdrops", "collect-all"}:
             collectors.append(("Airdrops.io", AirdropsIoCollector()))
         if args.command in {"collect-airdrop-alert", "collect-all"}:
             collectors.append(("AirdropAlert", AirdropAlertCollector()))
-        if args.command in {"collect-nft-calendar", "collect-all"}:
-            collectors.append(("NFTCalendar.io", NftCalendarCollector()))
         outcomes, has_failures = run_collectors(collectors, store)
         print(f"Total run: {outcomes or {'no_records': 0}}")
         if has_failures:

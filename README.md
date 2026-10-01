@@ -11,7 +11,6 @@ It is **review-first**: every imported opportunity has `REVIEW` status. The coll
 ## What is included
 
 - **Airdrops** — a polite Airdrops.io collector plus AirdropAlert's official RSS feed.
-- **NFT whitelist / mint opportunities** — a polite NFTCalendar.io collector reading its public upcoming-drops listing and individual event pages (category `NFT_WHITELIST`).
 - Default limit: 10 records per source per run (`RADAR_MAX_ITEMS_PER_RUN`).
 - Normalization into one opportunity record (title, project, category, chain, actions, reward, source status, link).
 - Deduplication via canonical source URL, content hash, and a conservative title-similarity fallback.
@@ -29,7 +28,7 @@ It is **review-first**: every imported opportunity has `REVIEW` status. The coll
    ```
 
 3. Copy `.env.example` to `.env`. Do not commit it.
-4. Start locally (no account required for Airdrops.io, AirdropAlert, or NFTCalendar.io):
+4. Start locally (no account required for Airdrops.io or AirdropAlert):
 
    ```powershell
    $env:PYTHONPATH = "src"
@@ -80,13 +79,17 @@ Use GitHub Actions for scheduled collection and the Cloudflare Worker in `worker
 
 ## Source-access boundaries
 
-Each scraped collector (Airdrops.io, NFTCalendar.io) reads only the site's public home/listing and a limited number of linked public pages. Both avoid the site's own sponsored/tracking redirect links (`/visit/` on Airdrops.io, `/goto/` on NFTCalendar.io), search, admin, login, and any protected areas, and wait between page requests. Before scheduling either, configure a real project contact in `RADAR_USER_AGENT` (set it as a repo *variable*, not a secret, at Settings → Secrets and variables → Actions → Variables), re-check NFTCalendar.io's [Terms of Use](https://nftcalendar.io/terms/) and `robots.txt`, and confirm nothing has changed; source layouts and permissions can change.
+The Airdrops.io collector reads only the site's public home/listing and a limited number of linked public pages, avoids the site's own sponsored/tracking redirect links (`/visit/`), search, admin, login, and any protected areas, and waits between page requests. Before scheduling it, configure a real project contact in `RADAR_USER_AGENT` (set it as a repo *variable*, not a secret, at Settings → Secrets and variables → Actions → Variables) and re-check the source's current policies; source layouts and permissions can change.
 
-**A known limitation:** some sites (NFTCalendar.io included) run bot-protection that blocks requests from cloud/datacenter IP ranges — including GitHub Actions' shared runners — even with a normal User-Agent, while the same request succeeds fine from a home connection. If a collector starts returning `403 Forbidden` only in the scheduled workflow and not locally, this is the most likely cause, not a code bug. One collector failing no longer takes the whole run down: `collect-all` runs every source independently, prints which one failed, and still commits whatever the other sources collected (see `run_collectors` in `cli.py`). The workflow step does still exit non-zero when any source failed, so you'll see it flagged in the Actions tab rather than it failing silently.
+**A known limitation worth remembering:** some sites run bot-protection (often Cloudflare) that blocks requests from cloud/datacenter IP ranges — including GitHub Actions' shared runners — even with a normal User-Agent, while the same request succeeds fine from a home connection. If a collector works locally but returns `403 Forbidden` only in the scheduled workflow, this is the most likely cause, not a code bug, and isn't something a different User-Agent or retry logic reliably fixes. This is exactly why NFTCalendar.io was pulled back out (see below) rather than left failing silently in CI.
+
+`collect-all` runs every source independently: one source's failure never stops the others, and prints which one failed rather than crashing (see `run_collectors` in `cli.py`). The workflow step does still exit non-zero when any configured source fails, so a genuine problem (e.g. Airdrops.io itself breaking, or bad Supabase credentials) is visible in the Actions tab rather than silently swallowed — but with only known-reliable sources currently wired in, this should stay quiet in normal operation.
 
 ## What is intentionally not included yet
 
 No paid proxy, AI API, or browser automation. CryptoRank is intentionally excluded until it grants a suitable licence or written permission: its terms restrict automated extraction and republishing.
+
+**NFT whitelist/mint opportunities** were briefly collected from NFTCalendar.io's public listing pages, but that source blocks requests from cloud/datacenter IP ranges (including GitHub Actions' shared runners) even with a normal User-Agent, so the scheduled workflow failed reliably even though the collector worked fine locally. Rather than leave a source that only works some of the time, it was pulled back out. If a cleaner path turns up later — an official API/RSS feed, or a self-hosted runner that uses a non-blocked IP — a matching collector can be added back the same way the others were.
 
 **Web3 jobs/gigs** were briefly tried via web3.career's documented API, but the source stopped responding reliably and was pulled back out rather than shipped in a broken state. If a solid jobs/gigs source turns up later (official API or RSS, not a scrape of an undocumented endpoint), it can be added the same way the other collectors were.
 
