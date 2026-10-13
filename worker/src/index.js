@@ -39,29 +39,59 @@ async function handleCallback(callback, env) {
   });
   const rows = await supabase(env, `opportunities?id=eq.${encodeURIComponent(opportunityId)}&select=*`);
   const opportunity = rows[0];
-  let sent = 0;
-  if (status === "APPROVED" && opportunity) {
-    const chats = await supabase(env, "telegram_chats?is_active=is.true&select=*");
-    for (const chat of chats.slice(0, 45)) { // Leaves room under the Free plan's per-request subrequest limit.
-      await telegram(env, "sendMessage", {
-        chat_id: chat.chat_id,
-        text: formatAlpha(opportunity),
-        parse_mode: "HTML",
-        disable_web_page_preview: true,
-      });
-      sent += 1;
-    }
-  }
+  let result = { sent: 0, failed: 0 };
+  if (status === "APPROVED" && opportunity) result = await broadcastAlpha(env, opportunity);
 
-  await telegram(env, "answerCallbackQuery", {
+  // The review message must always be answered and cleaned up, whatever happened while
+  // broadcasting, so a bad group can never leave the Approve button looking dead.
+  const failedNote = result.failed ? `, ${result.failed} failed` : "";
+  await bestEffort("answerCallbackQuery", () => telegram(env, "answerCallbackQuery", {
     callback_query_id: callback.id,
-    text: status === "APPROVED" ? `Approved — sent to ${sent} group(s).` : "Rejected.",
-  });
-  await telegram(env, "editMessageReplyMarkup", {
+    text: status === "APPROVED" ? `Approved — sent to ${result.sent} group(s)${failedNote}.` : "Rejected.",
+  }));
+  await bestEffort("editMessageReplyMarkup", () => telegram(env, "editMessageReplyMarkup", {
     chat_id: callback.message.chat.id,
     message_id: callback.message.message_id,
     reply_markup: { inline_keyboard: [] },
-  });
+  }));
+}
+
+// Telegram errors that mean the bot can no longer post there (group deleted, bot removed).
+// Rights problems are deliberately excluded: an admin can fix those without re-registering.
+const UNREACHABLE_CHAT = /chat not found|bot was kicked|bot is not a member|chat was deleted|bot was blocked/i;
+
+async function broadcastAlpha(env, opportunity) {
+  const chats = await supabase(env, "telegram_chats?is_active=is.true&select=*");
+  const text = formatAlpha(opportunity);
+  const unreachable = [];
+  let sent = 0;
+  let failed = 0;
+  // Capped to stay under the Free plan's 50 subrequests per invocation:
+  // 5 fixed calls + up to 40 sends + 1 batched deactivation.
+  for (const chat of chats.slice(0, 40)) {
+    try {
+      await telegram(env, "sendMessage", {
+        chat_id: chat.chat_id, text, parse_mode: "HTML", disable_web_page_preview: true,
+      });
+      sent += 1;
+    } catch (error) {
+      failed += 1;
+      console.error(`Broadcast to ${chat.chat_id} failed`, error);
+      if (UNREACHABLE_CHAT.test(String(error.message))) unreachable.push(chat.chat_id);
+    }
+  }
+  if (unreachable.length) {
+    // One batched call. A group that is re-added later is re-activated by /enable_broadcast.
+    await bestEffort("deactivate unreachable chats", () => supabase(
+      env, `telegram_chats?chat_id=in.(${unreachable.join(",")})`,
+      { method: "PATCH", body: JSON.stringify({ is_active: false }) },
+    ));
+  }
+  return { sent, failed };
+}
+
+async function bestEffort(label, action) {
+  try { return await action(); } catch (error) { console.error(`${label} failed`, error); }
 }
 
 async function enableBroadcast(message, env) {
