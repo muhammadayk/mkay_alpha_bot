@@ -4,4 +4,7 @@ __pycache__/
 *.py[cod]
 data/
 .pytest_cache/
-
+wrangler-account.json
+.wrangler/
+.dev.vars
+node_modules/
