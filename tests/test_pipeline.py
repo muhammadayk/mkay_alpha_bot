@@ -3,7 +3,7 @@ import unittest
 
 import requests
 
-from mkay_radar.cli import run_collectors
+from mkay_radar.cli import run_collectors, run_should_fail
 from mkay_radar.models import Opportunity, canonicalize_url
 from mkay_radar.sources.airdrops_io import AirdropsIoCollector
 from mkay_radar.sources.airdrop_alert import AirdropAlertCollector
@@ -28,6 +28,38 @@ class PipelineTests(unittest.TestCase):
             self.assertEqual(store.upsert(opportunity("https://airdrops.io/example/")), "unchanged")
             self.assertEqual(len(store.review_queue(10)), 1)
             store.connection.close()
+
+    def test_run_fails_only_when_every_source_failed(self) -> None:
+        self.assertFalse(run_should_fail(2, []))                    # all fine
+        self.assertFalse(run_should_fail(2, ["Airdrops.io"]))       # one blocked: later steps must still run
+        self.assertTrue(run_should_fail(2, ["Airdrops.io", "AirdropAlert"]))  # nothing collected
+        self.assertTrue(run_should_fail(1, ["Airdrops.io"]))        # single-source command that failed
+
+    def test_failed_source_emits_github_actions_warning(self) -> None:
+        import contextlib, io, os
+        class FailingCollector:
+            def collect(self):
+                raise requests.HTTPError("403 Client Error: Forbidden\nfor url: https://airdrops.io/")
+
+        with tempfile.TemporaryDirectory() as directory:
+            store = SQLiteStore(f"sqlite:///{directory}/radar.db")
+            store.initialize()
+            buffer = io.StringIO()
+            previous = os.environ.get("GITHUB_ACTIONS")
+            os.environ["GITHUB_ACTIONS"] = "true"
+            try:
+                with contextlib.redirect_stdout(buffer):
+                    run_collectors([("Airdrops.io", FailingCollector())], store)
+            finally:
+                if previous is None:
+                    os.environ.pop("GITHUB_ACTIONS", None)
+                else:
+                    os.environ["GITHUB_ACTIONS"] = previous
+            store.connection.close()
+        warning_lines = [line for line in buffer.getvalue().splitlines() if line.startswith("::warning")]
+        self.assertEqual(len(warning_lines), 1)
+        self.assertIn("Airdrops.io failed", warning_lines[0])
+        self.assertIn("403", warning_lines[0])
 
 
     def test_telegram_preview_is_safe_and_has_link(self) -> None:
@@ -59,10 +91,10 @@ class PipelineTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             store = SQLiteStore(f"sqlite:///{directory}/radar.db")
             store.initialize()
-            outcomes, has_failures = run_collectors(
+            outcomes, failures = run_collectors(
                 [("Working", WorkingCollector()), ("Failing", FailingCollector())], store
             )
-            self.assertTrue(has_failures)
+            self.assertEqual(failures, ["Failing"])
             self.assertEqual(outcomes.get("created"), 1)
             self.assertEqual(len(store.review_queue(10)), 1)
             store.connection.close()

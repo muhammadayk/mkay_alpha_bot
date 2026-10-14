@@ -17,26 +17,38 @@ def store_from_env():
     return open_store(os.getenv("RADAR_DATABASE_URL", "sqlite:///data/radar.db"), os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_SERVICE_ROLE_KEY"))
 
 
-def run_collectors(collectors, store) -> tuple[dict[str, int], bool]:
+def run_collectors(collectors, store) -> tuple[dict[str, int], list[str]]:
     """Run each (name, collector) pair independently: one source's failure never
-    stops the others, and whatever it already collected before failing is lost,
-    but every other source's records still land in the store."""
+    stops the others, and every other source's records still land in the store.
+
+    Returns (outcomes, names of sources that failed). Callers decide what counts
+    as a failed run; see main() for the exit-code rule."""
     outcomes: dict[str, int] = {}
-    has_failures = False
+    failures: list[str] = []
     for source_name, collector in collectors:
         source_outcomes: dict[str, int] = {}
         try:
             records = collector.collect()
         except requests.RequestException as error:
             print(f"{source_name} run failed, skipping (other sources still ran): {error}")
-            has_failures = True
+            if os.getenv("GITHUB_ACTIONS") == "true":
+                # Shows as a yellow warning in the Actions UI without failing the step.
+                detail = str(error).replace("\r", " ").replace("\n", " ")
+                print(f"::warning title={source_name} failed::{detail}")
+            failures.append(source_name)
             continue
         for opportunity in records:
             result = store.upsert(opportunity)
             source_outcomes[result] = source_outcomes.get(result, 0) + 1
             outcomes[result] = outcomes.get(result, 0) + 1
         print(f"{source_name} run complete: {source_outcomes or {'no_records': 0}}")
-    return outcomes, has_failures
+    return outcomes, failures
+
+
+def run_should_fail(total_sources: int, failures: list[str]) -> bool:
+    """A run fails only when every source failed, i.e. nothing could be collected.
+    A single blocked source is reported but must not stop later workflow steps."""
+    return bool(failures) and len(failures) == total_sources
 
 
 def main() -> None:
@@ -64,9 +76,9 @@ def main() -> None:
             collectors.append(("Airdrops.io", AirdropsIoCollector()))
         if args.command in {"collect-airdrop-alert", "collect-all"}:
             collectors.append(("AirdropAlert", AirdropAlertCollector()))
-        outcomes, has_failures = run_collectors(collectors, store)
+        outcomes, failures = run_collectors(collectors, store)
         print(f"Total run: {outcomes or {'no_records': 0}}")
-        if has_failures:
+        if run_should_fail(len(collectors), failures):
             sys.exit(1)
         return
 
