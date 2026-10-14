@@ -22,6 +22,7 @@ jobs:
           PYTHONPATH: src
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          CRYPTOJOBSLIST_API_KEY: ${{ secrets.CRYPTOJOBSLIST_API_KEY }}
           RADAR_USER_AGENT: ${{ vars.RADAR_USER_AGENT }}
           RADAR_MAX_ITEMS_PER_RUN: "10"
           RADAR_REQUEST_DELAY_SECONDS: "1"

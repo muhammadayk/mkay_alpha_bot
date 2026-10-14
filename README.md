@@ -11,6 +11,7 @@ It is **review-first**: every imported opportunity has `REVIEW` status. The coll
 ## What is included
 
 - **Airdrops** — a polite Airdrops.io collector plus AirdropAlert's official RSS feed.
+- **Remote jobs** — CryptoJobsList's official API, enabled after you add its API key.
 - Default limit: 10 records per source per run (`RADAR_MAX_ITEMS_PER_RUN`).
 - Normalization into one opportunity record (title, project, category, chain, actions, reward, source status, link).
 - Deduplication via canonical source URL, content hash, and a conservative title-similarity fallback.
@@ -37,6 +38,16 @@ It is **review-first**: every imported opportunity has `REVIEW` status. The coll
    ```
 
 The local database is created at `data/radar.db` and is ignored by Git.
+
+## Enable CryptoJobsList jobs (free API access)
+
+CryptoJobsList provides an official API for remote Web3 jobs. Request an API key through its [API access page](https://cryptojobslist.com/api-access), choosing a link-back integration. Then add this to local `.env` and to GitHub repository **Secrets** with the same name:
+
+```text
+CRYPTOJOBSLIST_API_KEY=your_key_here
+```
+
+After that, `collect-all` includes remote jobs automatically. Until the key is present, it simply skips this source—your airdrop scan still runs normally.
 
 ## Move to Supabase when ready
 
@@ -83,7 +94,7 @@ The Airdrops.io collector reads only the site's public home/listing and a limite
 
 **A known limitation worth remembering:** some sites run bot-protection (often Cloudflare) that blocks requests from cloud/datacenter IP ranges — including GitHub Actions' shared runners — even with a normal User-Agent, while the same request succeeds fine from a home connection. If a collector works locally but returns `403 Forbidden` only in the scheduled workflow, this is the most likely cause, not a code bug, and isn't something a different User-Agent or retry logic reliably fixes. This is exactly why NFTCalendar.io was pulled back out (see below) rather than left failing silently in CI.
 
-`collect-all` runs every source independently: one source's failure never stops the others, and prints which one failed rather than crashing (see `run_collectors` in `cli.py`). The workflow step does still exit non-zero when any configured source fails, so a genuine problem (e.g. Airdrops.io itself breaking, or bad Supabase credentials) is visible in the Actions tab rather than silently swallowed — but with only known-reliable sources currently wired in, this should stay quiet in normal operation.
+`collect-all` runs every source independently: one source's failure never stops the others, and prints which one failed rather than crashing (see `run_collectors` in `cli.py`). The workflow exits non-zero only when every enabled source fails, so a single blocked site cannot prevent all other opportunities from reaching review.
 
 ## What is intentionally not included yet
 

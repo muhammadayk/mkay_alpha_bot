@@ -7,6 +7,7 @@ from mkay_radar.cli import run_collectors, run_should_fail
 from mkay_radar.models import Opportunity, canonicalize_url
 from mkay_radar.sources.airdrops_io import AirdropsIoCollector
 from mkay_radar.sources.airdrop_alert import AirdropAlertCollector
+from mkay_radar.sources.cryptojobslist import CryptoJobsListCollector
 from mkay_radar.storage import SQLiteStore
 from mkay_radar.telegram import format_review
 
@@ -78,6 +79,21 @@ class PipelineTests(unittest.TestCase):
         records = AirdropAlertCollector.parse(feed)
         self.assertEqual(len(records), 1)
         self.assertEqual(records[0].source, "airdropalert.com")
+
+    def test_cryptojobslist_api_keeps_remote_jobs(self) -> None:
+        payload = {"jobs": [{
+            "jobTitle": "Solidity Engineer",
+            "companyName": "Example Protocol",
+            "canonicalURL": "https://cryptojobslist.com/jobs/example",
+            "description": "Build smart contracts.",
+            "tags": ["solidity", "defi"],
+            "employmentType": ["FULL_TIME"],
+        }]}
+        records = CryptoJobsListCollector.parse(payload)
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0].category, "JOB")
+        self.assertEqual(records[0].project, "Example Protocol")
+        self.assertIn("Remote", records[0].requirements)
 
     def test_one_failing_collector_does_not_block_the_others(self) -> None:
         class WorkingCollector:
