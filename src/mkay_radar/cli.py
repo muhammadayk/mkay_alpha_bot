@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from mkay_radar.sources.airdrops_io import AirdropsIoCollector
 from mkay_radar.sources.airdrop_alert import AirdropAlertCollector
 from mkay_radar.sources.cryptojobslist import CryptoJobsListCollector
+from mkay_radar.sources.web3_career import Web3CareerCollector
 from mkay_radar.storage import open_store
 from mkay_radar.telegram import TelegramReviewPublisher, format_review
 
@@ -64,6 +65,7 @@ def main() -> None:
     commands.add_parser("collect-airdrops", help="Collect public Airdrops.io guides into the review queue")
     commands.add_parser("collect-airdrop-alert", help="Collect official AirdropAlert RSS listings into the review queue")
     commands.add_parser("collect-cryptojobslist", help="Collect remote jobs through the CryptoJobsList API")
+    commands.add_parser("collect-web3-career", help="Collect remote jobs through the web3.career API")
     commands.add_parser("collect-all", help="Collect every approved source into the review queue")
     review = commands.add_parser("review", help="Print or send Telegram-ready review messages")
     review.add_argument("--limit", type=int, default=5)
@@ -73,7 +75,7 @@ def main() -> None:
     args = parser.parse_args()
     store = store_from_env()
 
-    collect_commands = {"collect-airdrops", "collect-airdrop-alert", "collect-cryptojobslist", "collect-all"}
+    collect_commands = {"collect-airdrops", "collect-airdrop-alert", "collect-cryptojobslist", "collect-web3-career", "collect-all"}
     if args.command in collect_commands:
         collectors = []
         if args.command in {"collect-airdrops", "collect-all"}:
@@ -82,12 +84,19 @@ def main() -> None:
             collectors.append(("AirdropAlert", AirdropAlertCollector()))
         if args.command == "collect-cryptojobslist":
             collectors.append(("CryptoJobsList", CryptoJobsListCollector()))
+        if args.command == "collect-web3-career":
+            collectors.append(("web3.career", Web3CareerCollector()))
         elif args.command == "collect-all":
             jobs = CryptoJobsListCollector()
             if jobs.configured():
                 collectors.append(("CryptoJobsList", jobs))
             else:
                 print("CryptoJobsList skipped: set CRYPTOJOBSLIST_API_KEY to enable official API job collection.")
+            web3_career = Web3CareerCollector()
+            if web3_career.configured():
+                collectors.append(("web3.career", web3_career))
+            else:
+                print("web3.career skipped: set WEB3_CAREER_API_TOKEN to enable official API job collection.")
         outcomes, failures = run_collectors(collectors, store)
         print(f"Total run: {outcomes or {'no_records': 0}}")
         if run_should_fail(len(collectors), failures):

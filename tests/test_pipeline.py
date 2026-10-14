@@ -8,6 +8,7 @@ from mkay_radar.models import Opportunity, canonicalize_url
 from mkay_radar.sources.airdrops_io import AirdropsIoCollector
 from mkay_radar.sources.airdrop_alert import AirdropAlertCollector
 from mkay_radar.sources.cryptojobslist import CryptoJobsListCollector
+from mkay_radar.sources.web3_career import Web3CareerCollector
 from mkay_radar.storage import SQLiteStore
 from mkay_radar.telegram import format_review
 
@@ -94,6 +95,24 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(records[0].category, "JOB")
         self.assertEqual(records[0].project, "Example Protocol")
         self.assertIn("Remote", records[0].requirements)
+
+    def test_web3_career_parses_official_response_shape(self) -> None:
+        payload = [{"total": 1}, {}, [{
+            "title": "Smart Contract Engineer",
+            "company": "Acme Protocol",
+            "apply_url": "https://web3.career/r/abc123",
+            "is_remote": True,
+            "location": "Remote",
+            "tags": ["solidity", "remote"],
+            "date_epoch": 1750000000,
+            "description": "Build and audit smart contracts.",
+            "salary_text": "$120k - $150k/year",
+        }]]
+        records = Web3CareerCollector.parse(payload)
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0].category, "JOB")
+        self.assertEqual(records[0].project, "Acme Protocol")
+        self.assertEqual(records[0].reward, "$120k - $150k/year")
 
     def test_one_failing_collector_does_not_block_the_others(self) -> None:
         class WorkingCollector:

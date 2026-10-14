@@ -12,6 +12,7 @@ It is **review-first**: every imported opportunity has `REVIEW` status. The coll
 
 - **Airdrops** — a polite Airdrops.io collector plus AirdropAlert's official RSS feed.
 - **Remote jobs** — CryptoJobsList's official API, enabled after you add its API key.
+- **Remote jobs** — web3.career's official API, enabled after you add its token.
 - Default limit: 10 records per source per run (`RADAR_MAX_ITEMS_PER_RUN`).
 - Normalization into one opportunity record (title, project, category, chain, actions, reward, source status, link).
 - Deduplication via canonical source URL, content hash, and a conservative title-similarity fallback.
@@ -48,6 +49,10 @@ CRYPTOJOBSLIST_API_KEY=your_key_here
 ```
 
 After that, `collect-all` includes remote jobs automatically. Until the key is present, it simply skips this source—your airdrop scan still runs normally.
+
+## Enable web3.career jobs
+
+Add your web3.career API token as `WEB3_CAREER_API_TOKEN` in local `.env` and as a GitHub repository **Secret** with the same name. The scheduled workflow imports remote roles only, preserves each source-provided application URL, and sends every role to Telegram review before it can be broadcast.
 
 ## Move to Supabase when ready
 
