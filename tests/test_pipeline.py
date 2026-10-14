@@ -98,3 +98,22 @@ class PipelineTests(unittest.TestCase):
             self.assertEqual(outcomes.get("created"), 1)
             self.assertEqual(len(store.review_queue(10)), 1)
             store.connection.close()
+
+    def test_bad_source_format_does_not_block_the_others(self) -> None:
+        class WorkingCollector:
+            def collect(self):
+                return [opportunity("https://airdrops.io/still-working/")]
+
+        class BadFeedCollector:
+            def collect(self):
+                raise ValueError("The feed is not valid XML")
+
+        with tempfile.TemporaryDirectory() as directory:
+            store = SQLiteStore(f"sqlite:///{directory}/radar.db")
+            store.initialize()
+            outcomes, failures = run_collectors(
+                [("Working", WorkingCollector()), ("Bad feed", BadFeedCollector())], store
+            )
+            self.assertEqual(failures, ["Bad feed"])
+            self.assertEqual(outcomes.get("created"), 1)
+            store.connection.close()

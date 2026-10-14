@@ -29,11 +29,13 @@ def run_collectors(collectors, store) -> tuple[dict[str, int], list[str]]:
         source_outcomes: dict[str, int] = {}
         try:
             records = collector.collect()
-        except requests.RequestException as error:
+        # A source is external and can change without warning. Treat parsing
+        # errors like network errors, so one bad feed cannot stop every scan.
+        except Exception as error:
             print(f"{source_name} run failed, skipping (other sources still ran): {error}")
             if os.getenv("GITHUB_ACTIONS") == "true":
                 # Shows as a yellow warning in the Actions UI without failing the step.
-                detail = str(error).replace("\r", " ").replace("\n", " ")
+                detail = f"{type(error).__name__}: {error}".replace("\r", " ").replace("\n", " ")
                 print(f"::warning title={source_name} failed::{detail}")
             failures.append(source_name)
             continue

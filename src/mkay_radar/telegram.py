@@ -59,21 +59,31 @@ class TelegramReviewPublisher:
     def send_review(self, opportunity: dict) -> None:
         if not self.configured():
             raise RuntimeError("Telegram is not configured. Set TELEGRAM_BOT_TOKEN and TELEGRAM_REVIEW_CHAT_ID.")
-        response = requests.post(
-            f"https://api.telegram.org/bot{self.token}/sendMessage",
-            json={
-                "chat_id": self.chat_id,
-                "text": format_review(opportunity),
-                "parse_mode": "HTML",
-                "disable_web_page_preview": True,
-                "reply_markup": {"inline_keyboard": [[
-                    {"text": "✅ Approve", "callback_data": f"approve:{opportunity['id']}"},
-                    {"text": "❌ Reject", "callback_data": f"reject:{opportunity['id']}"},
-                ]]},
-            },
-            timeout=30,
-        )
-        response.raise_for_status()
+        payload = {
+            "chat_id": self.chat_id,
+            "text": format_review(opportunity),
+            "parse_mode": "HTML",
+            "disable_web_page_preview": True,
+            "reply_markup": {"inline_keyboard": [[
+                {"text": "✅ Approve", "callback_data": f"approve:{opportunity['id']}"},
+                {"text": "❌ Reject", "callback_data": f"reject:{opportunity['id']}"},
+            ]]},
+        }
+        # Telegram can briefly return 429 when a scheduled run has several
+        # fresh listings. Respect retry_after instead of failing the full run.
+        for attempt in range(3):
+            response = requests.post(f"https://api.telegram.org/bot{self.token}/sendMessage", json=payload, timeout=30)
+            if response.status_code != 429:
+                response.raise_for_status()
+                time.sleep(0.35)
+                return
+            try:
+                retry_after = int(response.json().get("parameters", {}).get("retry_after", 1))
+            except (TypeError, ValueError, requests.JSONDecodeError):
+                retry_after = 1
+            if attempt == 2:
+                response.raise_for_status()
+            time.sleep(max(1, retry_after))
 
     def _api(self, method: str, **kwargs):
         response = requests.request(method, f"https://api.telegram.org/bot{self.token}/{kwargs.pop('endpoint')}", timeout=30, **kwargs)
